@@ -16,21 +16,23 @@ ADMIN_ID = os.getenv("ADMIN_ID")
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Dictionary to temporarily store text for scheduling
+# Global Variables for Control
 pending_posts = {}
+auto_post_interval = 0  # 0 means turned off
+auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # استخدام إعدادات لمنع التكرار وزيادة الإبداع والعشوائية
+        # إعدادات متطورة لزيادة الإبداع والعشوائية ومنع التكرار
         generation_config = {
-            "temperature": 0.9,  # رفع الحرارة لزيادة العشوائية والابتكار
+            "temperature": 0.95,
             "top_p": 0.95,
             "top_k": 40,
         }
-        model = genai.GenerativeModel('gemini-pro', generation_config=generation_config)
+        # استخدام النموذج الأحدث والأسرع المتوافق مع المفتاح الجديد
+        model = genai.GenerativeModel('gemini-1.5-flash', generation_config=generation_config)
         
-        # إضافة عنصر عشوائي داخل الأمر نفسه لإجبار الذكاء الاصطناعي على تغيير مساره الفكري في كل مرة
-        random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير"]
+        random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
         chosen_theme = random.choice(random_themes)
         
         prompts = {
@@ -49,14 +51,15 @@ def get_main_keyboard():
     btn_q = types.InlineKeyboardButton("🌌 توليد ومراجعة مقولة عميقة", callback_data="gen_quote")
     btn_a = types.InlineKeyboardButton("🧠 توليد ومراجعة مقال مكثف", callback_data="gen_article")
     btn_instant = types.InlineKeyboardButton("⚡ توليد ونشر فوري (للتجربة)", callback_data="instant_now")
-    markup.add(btn_q, btn_a, btn_instant)
+    btn_auto = types.InlineKeyboardButton("⏳ ضبط النشر التلقائي الدوري", callback_data="show_auto_settings")
+    markup.add(btn_q, btn_a, btn_instant, btn_auto)
     return markup
 
 def get_admin_keyboard(content_type="quote"):
     markup = types.InlineKeyboardMarkup(row_width=2)
     btn_reg = types.InlineKeyboardButton("🔄 إعادة توليد", callback_data=f"regen_{content_type}")
     btn_pub = types.InlineKeyboardButton("📢 نشر فوري", callback_data="publish")
-    btn_sch = types.InlineKeyboardButton("⏳ جدولة النشر", callback_data="show_schedule")
+    btn_sch = types.InlineKeyboardButton("⏳ جدولة هذا المنشور", callback_data="show_schedule")
     
     if content_type == "quote":
         btn_expand = types.InlineKeyboardButton("📝 تحويل لمقال", callback_data="expand")
@@ -78,13 +81,39 @@ def get_schedule_keyboard():
     markup.add(btn_back)
     return markup
 
+def get_auto_post_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    btn_1h = types.InlineKeyboardButton("كل ساعة", callback_data="set_auto_3600")
+    btn_6h = types.InlineKeyboardButton("كل 6 ساعات", callback_data="set_auto_21600")
+    btn_12h = types.InlineKeyboardButton("كل 12 ساعة", callback_data="set_auto_43200")
+    btn_24h = types.InlineKeyboardButton("كل 24 ساعة", callback_data="set_auto_86400")
+    btn_stop = types.InlineKeyboardButton("🛑 إيقاف النشر التلقائي الدوري", callback_data="stop_auto")
+    btn_back = types.InlineKeyboardButton("🔙 عودة للرئيسية", callback_data="back_to_home")
+    markup.add(btn_1h, btn_6h, btn_12h, btn_24h)
+    markup.add(btn_stop)
+    markup.add(btn_back)
+    return markup
+
 def delayed_publish(target_chat_id, text, delay_seconds):
     time.sleep(delay_seconds)
     try:
         bot.send_message(target_chat_id, text, parse_mode="Markdown")
-        print("Scheduled post sent successfully.")
     except Exception as e:
         print(f"Failed to send scheduled post: {e}")
+
+def auto_post_loop():
+    global auto_post_interval
+    while auto_post_interval > 0:
+        time.sleep(auto_post_interval)
+        if auto_post_interval == 0:
+            break
+        text = generate_content("quote")
+        if text and "حدث خطأ" not in text:
+            try:
+                bot.send_message(CHAT_ID, text, parse_mode="Markdown")
+                print("Auto periodic post sent.")
+            except Exception as e:
+                print(f"Auto post error: {e}")
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -97,6 +126,7 @@ def handle_query(call):
     if str(call.from_user.id) != ADMIN_ID:
         return
 
+    global auto_post_interval, auto_post_thread
     current_text = call.message.text
 
     if call.data == "instant_now":
@@ -117,6 +147,26 @@ def handle_query(call):
         bot.edit_message_text("جاري كتابة المقال العميق... 🧠", call.message.chat.id, call.message.message_id)
         text = generate_content("article")
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard("article"))
+
+    elif call.data == "show_auto_settings":
+        status = f"كل {int(auto_post_interval/3600)} ساعة" if auto_post_interval > 0 else "متوقف حالياً 🛑"
+        bot.edit_message_text(f"⚙️ **إعدادات النشر التلقائي الدوري:**\n\nالوضع الحالي: {status}\n\nاختر كم مرة تريد من البوت أن يولد مقولة وينشرها تلقائياً بالكامل في القناة:", call.message.chat.id, call.message.message_id, reply_markup=get_auto_post_keyboard())
+
+    elif call.data.startswith("set_auto_"):
+        interval = int(call.data.split("_")[2])
+        auto_post_interval = interval
+        hours_text = {3600: "ساعة واحدة", 21600: "6 ساعات", 43200: "12 ساعة", 86400: "24 ساعة"}.get(interval)
+        
+        # Start background thread for periodic posts if not running
+        if auto_post_thread is专 or not auto_post_thread.is_alive():
+            auto_post_thread = threading.Thread(target=auto_post_loop, daemon=True)
+            auto_post_thread.start()
+            
+        bot.edit_message_text(f"✅ **تم تفعيل النشر التلقائي بنجاح!**\n\nسيعمل البوت تلقائياً على توليد ونشر مقولة جديدة كل **{hours_text}** بدون أي تدخل منك.", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
+
+    elif call.data == "stop_auto":
+        auto_post_interval = 0
+        bot.edit_message_text("🛑 **تم إيقاف نظام النشر التلقائي الدوري.** لن ينشر البوت مجدداً إلا بطلب يدوي منك.", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
         
     elif call.data == "expand":
         bot.edit_message_text("جاري التوسع في الفكرة وتحويلها لمقال... 📝", call.message.chat.id, call.message.message_id)
@@ -128,15 +178,15 @@ def handle_query(call):
             bot.send_message(CHAT_ID, current_text, parse_mode="Markdown")
             bot.edit_message_text(f"{current_text}\n\n✅ **تم النشر بنجاح فوراً في القناة!**", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
         except Exception as e:
-            bot.edit_message_text(f"{current_text}\n\n❌ **فشل النشر:** تأكد من رتبة الآدمن البوت.", call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard())
+            bot.edit_message_text(f"{current_text}\n\n❌ **فشل النشر:** تأكد من رتبة الآدمن.", call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard())
 
     elif call.data == "show_schedule":
         pending_posts[call.message.message_id] = current_text
-        bot.edit_message_text("اختر الوقت الذي ترغب بنشر المقال فيه تلقائياً للقناة:", call.message.chat.id, call.message.message_id, reply_markup=get_schedule_keyboard())
+        bot.edit_message_text("اختر وقت النشر التلقائي لهذا المنشور المحدد فقط:", call.message.chat.id, call.message.message_id, reply_markup=get_schedule_keyboard())
 
     elif call.data.startswith("sch_"):
         delay = int(call.data.split("_")[1])
-        hours_text = {3600: "ساعة واحدة", 21600: "6 ساعات", 43200: "12 ساعة", 86400: "24 ساعة"}.get(delay, f"{delay} ثانية")
+        hours_text = {3600: "ساعة واحدة", 21600: "6 ساعات", 43200: "12 ساعة", 86400: "24 ساعة"}.get(delay)
         saved_text = pending_posts.get(call.message.message_id, current_text)
         
         threading.Thread(target=delayed_publish, args=(CHAT_ID, saved_text, delay), daemon=True).start()
@@ -151,5 +201,5 @@ def handle_query(call):
         bot.edit_message_text("لوحة التحكم الرئيسية:", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
 
 if __name__ == "__main__":
-    print("Anti-duplicate Admin Control Bot is running...")
+    print("Periodic Auto-Post Control Bot is running...")
     bot.infinity_polling()
