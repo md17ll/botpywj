@@ -29,7 +29,7 @@ def generate_content(prompt_type):
             "top_p": 0.95,
             "top_k": 40,
         }
-        # استخدام النموذج الأحدث والأسرع المتوافق مع المفتاح الجديد
+        # استخدام التسمية الصحيحة والمباشرة المتوافقة مع تحديث المكتبة الجديد
         model = genai.GenerativeModel('gemini-1.5-flash', generation_config=generation_config)
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
@@ -37,7 +37,7 @@ def generate_content(prompt_type):
         
         prompts = {
             "quote": f"اكتب مقولة فلسفية عميقة أو خاطرة فكرية قصيرة جداً (سطرين) تركز بشكل غير مباشر على مفهوم ({chosen_theme}). تحمل عمقاً نفسياً، بلغة عربية فصحى بليغة ورصينة. صِغ شيئاً فريداً وجديداً كلياً، واشترط عدم تكرار الأفكار المستهلكة. أعطني النص مباشرة دون مقدمات أو ترحيب أو هاشتاغات.",
-            "article": f"اكتب مقالاً مصغراً وعميقاً (3 فقرات مكثفة) يناقش معضلة وجودية أو فكرة نفسية غامضة حول ({chosen_theme}). الأسلوب شاعري، رصين، وبليغ جداً، مبتكر وغير مكرر، دون مقدمات أو ترحيب."
+            "article": f"اكتب مقالاً مصغراً وعميقاً (3 فقرات مكثفة) يناقش معضلة وجودية أو فكرة نفسية غامضة حول ({chosen_theme}). الأسلوب شاعري, رصين، وبليغ جداً، مبتكر وغير مكرر، دون مقدمات أو ترحيب."
         }
         
         response = model.generate_content(prompts.get(prompt_type, prompts["quote"]))
@@ -157,7 +157,6 @@ def handle_query(call):
         auto_post_interval = interval
         hours_text = {3600: "ساعة واحدة", 21600: "6 ساعات", 43200: "12 ساعة", 86400: "24 ساعة"}.get(interval)
         
-        # تم إصلاح السطر أدناه بنجاح واستبدال الحرف الخاطئ بـ None
         if auto_post_thread is None or not auto_post_thread.is_alive():
             auto_post_thread = threading.Thread(target=auto_post_loop, daemon=True)
             auto_post_thread.start()
