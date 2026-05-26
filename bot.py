@@ -23,13 +23,11 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # إعدادات متطورة لزيادة الإبداع والعشوائية ومنع التكرار
         generation_config = {
             "temperature": 0.95,
             "top_p": 0.95,
             "top_k": 40,
         }
-        # استخدام التسمية الصحيحة والمباشرة المتوافقة مع تحديث المكتبة الجديد
         model = genai.GenerativeModel('gemini-1.5-flash', generation_config=generation_config)
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
@@ -37,7 +35,7 @@ def generate_content(prompt_type):
         
         prompts = {
             "quote": f"اكتب مقولة فلسفية عميقة أو خاطرة فكرية قصيرة جداً (سطرين) تركز بشكل غير مباشر على مفهوم ({chosen_theme}). تحمل عمقاً نفسياً، بلغة عربية فصحى بليغة ورصينة. صِغ شيئاً فريداً وجديداً كلياً، واشترط عدم تكرار الأفكار المستهلكة. أعطني النص مباشرة دون مقدمات أو ترحيب أو هاشتاغات.",
-            "article": f"اكتب مقالاً مصغراً وعميقاً (3 فقرات مكثفة) يناقش معضلة وجودية أو فكرة نفسية غامضة حول ({chosen_theme}). الأسلوب شاعري, رصين، وبليغ جداً، مبتكر وغير مكرر، دون مقدمات أو ترحيب."
+            "article": f"اكتب مقالاً مصغراً وعميقاً (3 فقرات مكثفة) يناقش معضلة وجودية أو فكرة نفسية غامضة حول ({chosen_theme}). الأسلوب شاعري، رصين، وبليغ جداً، مبتكر وغير مكرر، دون مقدمات أو ترحيب."
         }
         
         response = model.generate_content(prompts.get(prompt_type, prompts["quote"]))
@@ -201,4 +199,5 @@ def handle_query(call):
 
 if __name__ == "__main__":
     print("Periodic Auto-Post Control Bot is running...")
-    bot.infinity_polling()
+    # تم تحديث السطر البرمجي الأخير لتنظيف الطابور المعلق فوراً ومنع الـ 409 Conflict نهائياً
+    bot.infinity_polling(skip_pending=True)
