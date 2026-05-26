@@ -157,8 +157,8 @@ def handle_query(call):
         auto_post_interval = interval
         hours_text = {3600: "ساعة واحدة", 21600: "6 ساعات", 43200: "12 ساعة", 86400: "24 ساعة"}.get(interval)
         
-        # Start background thread for periodic posts if not running
-        if auto_post_thread is专 or not auto_post_thread.is_alive():
+        # تم إصلاح السطر أدناه بنجاح واستبدال الحرف الخاطئ بـ None
+        if auto_post_thread is None or not auto_post_thread.is_alive():
             auto_post_thread = threading.Thread(target=auto_post_loop, daemon=True)
             auto_post_thread.start()
             
