@@ -2,6 +2,7 @@ import os
 import threading
 import time
 import random
+import re
 import requests
 import telebot
 from telebot import types
@@ -18,7 +19,19 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 # Global Variables for Control
 pending_posts = {}
 auto_post_interval = 0  # 0 means turned off
+auto_post_type = "quote"  # default type: quote, article, or mix
 auto_post_thread = None
+
+def clean_text_for_article(text):
+    """تنظيف النص من الهمزات وحركات التشكيل والجر وترك الحروف السادة فقط"""
+    # 1. إزالة التشكيل بالكامل (الفتحة، الضمة، الكسرة، السكون، التنوين، الشدة)
+    tashkeel_pattern = re.compile(r'[\u064B-\u0652]')
+    text = re.sub(tashkeel_pattern, '', text)
+    
+    # 2. تحويل الألف بكافة أشكال الهمزات إلى ألف عادية (ا)
+    text = re.sub(r'[أإآ]', 'ا', text)
+    
+    return text
 
 def generate_content(prompt_type):
     try:
@@ -33,7 +46,6 @@ def generate_content(prompt_type):
         }
         
         payload = {
-            # المعرّف الرسمي المفتوح والمستقر تماماً في OpenRouter
             "model": "openrouter/auto", 
             "messages": [
                 {"role": "user", "content": prompts.get(prompt_type, prompts["quote"])}
@@ -44,7 +56,7 @@ def generate_content(prompt_type):
         headers = {
             "Authorization": f"Bearer {GEMINI_API_KEY}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://railway.app", # متطلب لتشغيل بعض نماذج OpenRouter المستقرة
+            "HTTP-Referer": "https://railway.app",
             "X-Title": "Telegram Auto Bot"
         }
         
@@ -55,8 +67,13 @@ def generate_content(prompt_type):
             print(f"⚠️ OpenRouter Error: {response_data['error']['message']}")
             return "حدث خطأ أثناء توليد المحتوى من السيرفر الوسيط."
             
-        generated_text = response_data['choices'][0]['message']['content']
-        return generated_text.strip()
+        generated_text = response_data['choices'][0]['message']['content'].strip()
+        
+        # إذا كان المطلوب مقالاً، نقوم بتطبيق فلتر تنظيف الحروف والهمزات فوراً
+        if prompt_type == "article":
+            generated_text = clean_text_for_article(generated_text)
+            
+        return generated_text
         
     except Exception as e:
         print(f"❌ Connection Error: {e}")
@@ -67,7 +84,7 @@ def get_main_keyboard():
     btn_q = types.InlineKeyboardButton("🌌 توليد ومراجعة مقولة عميقة", callback_data="gen_quote")
     btn_a = types.InlineKeyboardButton("🧠 توليد ومراجعة مقال مكثف", callback_data="gen_article")
     btn_instant = types.InlineKeyboardButton("⚡ توليد ونشر فوري (للتجربة)", callback_data="instant_now")
-    btn_auto = types.InlineKeyboardButton("⏳ ضبط النشر التلقائي الدوري", callback_data="show_auto_settings")
+    btn_auto = types.InlineKeyboardButton("⏳ ضبط النشر التلقائي الدوري", callback_data="show_auto_types")
     markup.add(btn_q, btn_a, btn_instant, btn_auto)
     return markup
 
@@ -97,6 +114,16 @@ def get_schedule_keyboard():
     markup.add(btn_back)
     return markup
 
+def get_auto_type_keyboard():
+    """لوحة التحكم الشفافة الجديدة لاختيار نوع المحتوى التلقائي"""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    btn_type_q = types.InlineKeyboardButton("📝 نشر مقولات فلسفية فقط", callback_data="settype_quote")
+    btn_type_a = types.InlineKeyboardButton("📚 نشر مقالات مكثفة (حروف سادة) فقط", callback_data="settype_article")
+    btn_type_m = types.InlineKeyboardButton("🔀 نشر ميكس (مقولة أو مقال عشوائياً)", callback_data="settype_mix")
+    btn_back = types.InlineKeyboardButton("🔙 عودة للرئيسية", callback_data="back_to_home")
+    markup.add(btn_type_q, btn_type_a, btn_type_m, btn_back)
+    return markup
+
 def get_auto_post_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
     btn_1h = types.InlineKeyboardButton("كل ساعة", callback_data="set_auto_3600")
@@ -118,16 +145,22 @@ def delayed_publish(target_chat_id, text, delay_seconds):
         print(f"Failed to send scheduled post: {e}")
 
 def auto_post_loop():
-    global auto_post_interval
+    global auto_post_interval, auto_post_type
     while auto_post_interval > 0:
         time.sleep(auto_post_interval)
         if auto_post_interval == 0:
             break
-        text = generate_content("quote")
+            
+        # تحديد نوع المحتوى المطلوب بناء على اختيار الإعدادات
+        current_run_type = auto_post_type
+        if auto_post_type == "mix":
+            current_run_type = random.choice(["quote", "article"])
+            
+        text = generate_content(current_run_type)
         if text and "حدث خطأ" not in text:
             try:
                 bot.send_message(CHAT_ID, text, parse_mode="Markdown")
-                print("Auto periodic post sent.")
+                print(f"Auto periodic post ({current_run_type}) sent.")
             except Exception as e:
                 print(f"Auto post error: {e}")
 
@@ -142,7 +175,7 @@ def handle_query(call):
     if str(call.from_user.id) != ADMIN_ID:
         return
 
-    global auto_post_interval, auto_post_thread
+    global auto_post_interval, auto_post_thread, auto_post_type
     current_text = call.message.text
 
     if call.data == "instant_now":
@@ -163,34 +196,55 @@ def handle_query(call):
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard("quote"))
         
     elif call.data in ["gen_article", "regen_article"]:
-        bot.edit_message_text("جاري كتابة المقال العميق... 🧠", call.message.chat.id, call.message.message_id)
+        bot.edit_message_text("جاري كتابة المقال العميق بدون همزات وحركات... 🧠", call.message.chat.id, call.message.message_id)
         text = generate_content("article")
         if "حدث خطأ" in text:
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
         else:
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard("article"))
 
-    elif call.data == "show_auto_settings":
+    # المرحلة الأولى لضبط النشر التلقائي: اختيار النوع
+    elif call.data == "show_auto_types":
+        bot.edit_message_text("📥 **الخطوة 1: اختر نوع المحتوى المراد نشره تلقائياً دورياً:**", call.message.chat.id, call.message.message_id, reply_markup=get_auto_type_keyboard())
+
+    # حفظ النوع والفرع للخطوة الثانية: اختيار الوقت
+    elif call.data.startswith("settype_"):
+        selected_type = call.data.split("_")[1]
+        auto_post_type = selected_type
+        
+        type_readable = {
+            "quote": "المقولات فقط 📝",
+            "article": "المقالات (بدون همزات وحركات) فقط 📚",
+            "mix": "الميكس العشوائي 🔀"
+        }.get(selected_type)
+        
         status = f"كل {int(auto_post_interval/3600)} ساعة" if auto_post_interval > 0 else "متوقف حالياً 🛑"
-        bot.edit_message_text(f"⚙️ **إعدادات النشر التلقائي الدوري:**\n\nالوضع الحالي: {status}\n\nاختر كم مرة تريد من البوت أن يولد مقولة وينشرها تلقائياً بالكامل في القناة:", call.message.chat.id, call.message.message_id, reply_markup=get_auto_post_keyboard())
+        
+        bot.edit_message_text(f"⚙️ **الخطوة 2: تحديد التوقيت الدوري:**\n\nالنوع المختار: {type_readable}\nالوضع الحالي: {status}\n\nاختر الآن الفاصل الزمني للنشر:", call.message.chat.id, call.message.message_id, reply_markup=get_auto_post_keyboard())
 
     elif call.data.startswith("set_auto_"):
         interval = int(call.data.split("_")[2])
         auto_post_interval = interval
         hours_text = {3600: "ساعة واحدة", 21600: "6 ساعات", 43200: "12 ساعة", 86400: "24 ساعة"}.get(interval)
         
+        type_readable = {
+            "quote": "مقولات فلسفية",
+            "article": "مقالات مكثفة (حروف سادة)",
+            "mix": "منشورات متنوعة (ميكس)"
+        }.get(auto_post_type)
+        
         if auto_post_thread is None or not auto_post_thread.is_alive():
             auto_post_thread = threading.Thread(target=auto_post_loop, daemon=True)
             auto_post_thread.start()
             
-        bot.edit_message_text(f"✅ **تم تفعيل النشر التلقائي بنجاح!**\n\nسيعمل البوت تلقائياً على توليد ونشر مقولة جديدة كل **{hours_text}** بدون أي تدخل منك.", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
+        bot.edit_message_text(f"✅ **تم تفعيل النشر التلقائي بنجاح!**\n\nسيعمل البوت تلقائياً على توليد ونشر **{type_readable}** جديدة كل **{hours_text}** في القناة بدون أدنى تدخل يدوي منك.", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
 
     elif call.data == "stop_auto":
         auto_post_interval = 0
         bot.edit_message_text("🛑 **تم إيقاف نظام النشر التلقائي الدوري.** لن ينشر البوت مجدداً إلا بطلب يدوي منك.", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
         
     elif call.data == "expand":
-        bot.edit_message_text("جاري التوسع في الفكرة وتحويلها لمقال... 📝", call.message.chat.id, call.message.message_id)
+        bot.edit_message_text("جاري التوسع في الفكرة وتحويلها لمقال بدون همزات... 📝", call.message.chat.id, call.message.message_id)
         text = generate_content("article")
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard("article"))
         
