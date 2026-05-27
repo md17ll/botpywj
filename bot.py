@@ -8,7 +8,7 @@ from telebot import types
 
 # Configuration from Environment Variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # سنضع هنا مفتاح OpenRouter الجديد
 CHAT_ID = os.getenv("CHANNEL_OR_CHAT_ID")
 ADMIN_ID = os.getenv("ADMIN_ID")
 
@@ -22,8 +22,8 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # استخدام النسخة v1 المستقرة والمدعومة عالمياً لحل مشكلة الحظر الجغرافي
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+        # رابط الاتصال الموحد لمنصة OpenRouter
+        url = "https://openrouter.ai/api/v1/chat/completions"
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
         chosen_theme = random.choice(random_themes)
@@ -34,28 +34,31 @@ def generate_content(prompt_type):
         }
         
         payload = {
-            "contents": [{
-                "parts": [{
-                    "text": prompts.get(prompt_type, prompts["quote"])
-                }]
-            }]
+            "model": "google/gemini-1.5-flash", # طلب نموذج جيمناي فلاش عبر اوبن راوتر لتخطي الحظر
+            "messages": [
+                {"role": "user", "content": prompts.get(prompt_type, prompts["quote"])}
+            ],
+            "temperature": 0.9
         }
         
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {GEMINI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
         
-        # كاشف أخطاء جوجل
+        # فحص إذا كانت المنصة أرجعت خطأ
         if 'error' in response_data:
-            print(f"⚠️ Google API Refused Us: {response_data['error']['message']}")
-            # محاولة بديلة فورا بنموذج gemini-1.5-flash على رابط v1 الافتراضي في حال توفره
-            return "حدث خطأ أثناء توليد المحتوى بسبب قيود الـ API."
+            print(f"⚠️ OpenRouter Error: {response_data['error']['message']}")
+            return "حدث خطأ أثناء توليد المحتوى من السيرفر الوسيط."
             
-        generated_text = response_data['candidates'][0]['content']['parts'][0]['text']
+        generated_text = response_data['choices'][0]['message']['content']
         return generated_text.strip()
         
     except Exception as e:
-        print(f"❌ Direct API Error: {e}")
+        print(f"❌ Connection Error: {e}")
         return "حدث خطأ أثناء توليد المحتوى."
 
 def get_main_keyboard():
@@ -63,7 +66,7 @@ def get_main_keyboard():
     btn_q = types.InlineKeyboardButton("🌌 توليد ومراجعة مقولة عميقة", callback_data="gen_quote")
     btn_a = types.InlineKeyboardButton("🧠 توليد ومراجعة مقال مكثف", callback_data="gen_article")
     btn_instant = types.InlineKeyboardButton("⚡ توليد ونشر فوري (للتجربة)", callback_data="instant_now")
-    btn_auto = types.InlineKeyboardButton("⏳ ضبط النشن التلقائي الدوري", callback_data="show_auto_settings")
+    btn_auto = types.InlineKeyboardButton("⏳ ضبط النشر التلقائي الدوري", callback_data="show_auto_settings")
     markup.add(btn_q, btn_a, btn_instant, btn_auto)
     return markup
 
@@ -148,7 +151,7 @@ def handle_query(call):
             bot.send_message(CHAT_ID, text, parse_mode="Markdown")
             bot.edit_message_text(f"🚀 **تم التوليد والنشر بنجاح وبشكل فوري في القناة!**\n\nالنص المنشور:\n_{text}_", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
         except Exception as e:
-            bot.edit_message_text(f"❌ **فشل النشر الفوري:**\nالخطأ: {text if 'بسبب قيود' in text else e}", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
+            bot.edit_message_text(f"❌ **فشل النشر الفوري:**\nالخطأ: {e}", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
 
     elif call.data in ["gen_quote", "regen_quote"]:
         bot.edit_message_text("جاري التفكير وتوليد المقولة... 🌌", call.message.chat.id, call.message.message_id)
