@@ -23,12 +23,14 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
+        # إعدادات متطورة لزيادة الإبداع والعشوائية ومنع التكرار
         generation_config = {
             "temperature": 0.95,
             "top_p": 0.95,
             "top_k": 40,
         }
-        model = genai.GenerativeModel('gemini-1.5-flash', generation_config=generation_config)
+        # تم تعديل السطر أدناه لإضافة المسار الكامل المباشر لحل مشكلة 404 نهائياً
+        model = genai.GenerativeModel('models/gemini-1.5-flash', generation_config=generation_config)
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
         chosen_theme = random.choice(random_themes)
@@ -199,5 +201,4 @@ def handle_query(call):
 
 if __name__ == "__main__":
     print("Periodic Auto-Post Control Bot is running...")
-    # تم تحديث السطر البرمجي الأخير لتنظيف الطابور المعلق فوراً ومنع الـ 409 Conflict نهائياً
     bot.infinity_polling(skip_pending=True)
