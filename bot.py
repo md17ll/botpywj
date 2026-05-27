@@ -23,15 +23,26 @@ auto_post_type = "quote"  # default type: quote, article, or mix
 auto_post_thread = None
 
 def clean_text_for_article(text):
-    """تنظيف النص من الهمزات وحركات التشكيل والجر وترك الحروف السادة فقط"""
-    # 1. إزالة التشكيل بالكامل (الفتحة، الضمة، الكسرة، السكون، التنوين، الشدة)
-    tashkeel_pattern = re.compile(r'[\u064B-\u0652]')
-    text = re.sub(tashkeel_pattern, '', text)
-    
-    # 2. تحويل الألف بكافة أشكال الهمزات إلى ألف عادية (ا)
+    """تنظيف النص بالكامل من الهمزات والتشكيل وترك الحروف سادة"""
+    if not text:
+        return text
+        
+    # 1. تحويل كافة أشكال الهمزات والألف الممدودة والمقصورة إلى ا عادية
     text = re.sub(r'[أإآ]', 'ا', text)
     
-    return text
+    # 2. إزالة علامات التشكيل والتنوين والشدة بالكامل
+    tashkeel_elements = [
+        r'[\u064B-\u0652]', # الفتحة، الضمة، الكسرة، السكون، التنوين
+        r'\u0651',         # الشدة
+        r'\u0670',         # الألف الخنجرية
+    ]
+    for pattern in tashkeel_elements:
+        text = re.sub(pattern, '', text)
+        
+    # 3. تنظيف أي علامات تنصيص زائدة قد يضعها النموذج حول المقال
+    text = text.replace('"', '').replace("'", "").replace("`", "")
+    
+    return text.strip()
 
 def generate_content(prompt_type):
     try:
@@ -69,7 +80,7 @@ def generate_content(prompt_type):
             
         generated_text = response_data['choices'][0]['message']['content'].strip()
         
-        # إذا كان المطلوب مقالاً، نقوم بتطبيق فلتر تنظيف الحروف والهمزات فوراً
+        # تنظيف فوري عند التوليد لأول مرة إذا كان المقال هو المطلوب
         if prompt_type == "article":
             generated_text = clean_text_for_article(generated_text)
             
@@ -115,7 +126,6 @@ def get_schedule_keyboard():
     return markup
 
 def get_auto_type_keyboard():
-    """لوحة التحكم الشفافة الجديدة لاختيار نوع المحتوى التلقائي"""
     markup = types.InlineKeyboardMarkup(row_width=1)
     btn_type_q = types.InlineKeyboardButton("📝 نشر مقولات فلسفية فقط", callback_data="settype_quote")
     btn_type_a = types.InlineKeyboardButton("📚 نشر مقالات مكثفة (حروف سادة) فقط", callback_data="settype_article")
@@ -151,7 +161,6 @@ def auto_post_loop():
         if auto_post_interval == 0:
             break
             
-        # تحديد نوع المحتوى المطلوب بناء على اختيار الإعدادات
         current_run_type = auto_post_type
         if auto_post_type == "mix":
             current_run_type = random.choice(["quote", "article"])
@@ -196,18 +205,16 @@ def handle_query(call):
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard("quote"))
         
     elif call.data in ["gen_article", "regen_article"]:
-        bot.edit_message_text("جاري كتابة المقال العميق بدون همزات وحركات... 🧠", call.message.chat.id, call.message.message_id)
+        bot.edit_message_text("جاري كتابة المقال العميق وتأكيد تنظيف الحروف... 🧠", call.message.chat.id, call.message.message_id)
         text = generate_content("article")
         if "حدث خطأ" in text:
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
         else:
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard("article"))
 
-    # المرحلة الأولى لضبط النشر التلقائي: اختيار النوع
     elif call.data == "show_auto_types":
         bot.edit_message_text("📥 **الخطوة 1: اختر نوع المحتوى المراد نشره تلقائياً دورياً:**", call.message.chat.id, call.message.message_id, reply_markup=get_auto_type_keyboard())
 
-    # حفظ النوع والفرع للخطوة الثانية: اختيار الوقت
     elif call.data.startswith("settype_"):
         selected_type = call.data.split("_")[1]
         auto_post_type = selected_type
@@ -219,7 +226,6 @@ def handle_query(call):
         }.get(selected_type)
         
         status = f"كل {int(auto_post_interval/3600)} ساعة" if auto_post_interval > 0 else "متوقف حالياً 🛑"
-        
         bot.edit_message_text(f"⚙️ **الخطوة 2: تحديد التوقيت الدوري:**\n\nالنوع المختار: {type_readable}\nالوضع الحالي: {status}\n\nاختر الآن الفاصل الزمني للنشر:", call.message.chat.id, call.message.message_id, reply_markup=get_auto_post_keyboard())
 
     elif call.data.startswith("set_auto_"):
@@ -244,7 +250,7 @@ def handle_query(call):
         bot.edit_message_text("🛑 **تم إيقاف نظام النشر التلقائي الدوري.** لن ينشر البوت مجدداً إلا بطلب يدوي منك.", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
         
     elif call.data == "expand":
-        bot.edit_message_text("جاري التوسع في الفكرة وتحويلها لمقال بدون همزات... 📝", call.message.chat.id, call.message.message_id)
+        bot.edit_message_text("جاري التوسع في الفكرة وتحويلها لمقال سادة... 📝", call.message.chat.id, call.message.message_id)
         text = generate_content("article")
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_admin_keyboard("article"))
         
