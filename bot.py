@@ -22,8 +22,8 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # استخدام نموذج gemini-pro المستقر لتفادي أخطاء العناوين نهائياً
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+        # الرابط المعتمد والرسمي الصحيح لنموذج gemini-1.5-flash
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
         chosen_theme = random.choice(random_themes)
@@ -33,26 +33,23 @@ def generate_content(prompt_type):
             "article": f"اكتب مقالاً مصغراً وعميقاً (3 فقرات مكثفة) يناقش معضلة وجودية أو فكرة نفسية غامضة حول ({chosen_theme}). الأسلوب شاعري، رصين، وبليغ جداً، مبتكر وغير مكرر، دون مقدمات أو ترحيب."
         }
         
+        # الهيكل الصحيح للبيانات المرسلة المتوافق مع معايير جوجل الحالية
         payload = {
             "contents": [{
                 "parts": [{
                     "text": prompts.get(prompt_type, prompts["quote"])
                 }]
-            }],
-            "generationConfig": {
-                "temperature": 0.85,
-                "topP": 0.95,
-                "topK": 40
-            }
+            }]
         }
         
         headers = {"Content-Type": "application/json"}
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
         
+        # فحص وجود خطأ قادم من سيرفر جوجل
         if 'error' in response_data:
             print(f"⚠️ Google API Refused Us: {response_data['error']['message']}")
-            return f"حدث خطأ بسبب قيود الـ API: {response_data['error']['message']}"
+            return "حدث خطأ أثناء توليد المحتوى بسبب قيود الـ API."
             
         generated_text = response_data['candidates'][0]['content']['parts'][0]['text']
         return generated_text.strip()
