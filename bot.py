@@ -8,7 +8,7 @@ from telebot import types
 
 # Configuration from Environment Variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # سنضع هنا مفتاح OpenRouter الجديد
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
 CHAT_ID = os.getenv("CHANNEL_OR_CHAT_ID")
 ADMIN_ID = os.getenv("ADMIN_ID")
 
@@ -22,7 +22,6 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # رابط الاتصال الموحد لمنصة OpenRouter
         url = "https://openrouter.ai/api/v1/chat/completions"
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
@@ -34,7 +33,8 @@ def generate_content(prompt_type):
         }
         
         payload = {
-            "model": "google/gemini-1.5-flash", # طلب نموذج جيمناي فلاش عبر اوبن راوتر لتخطي الحظر
+            # تم تحديث الاسم هنا إلى المعرّف المجاني والمستقر تماماً في OpenRouter لنموذج جيمناي فلاش
+            "model": "google/gemini-flash-1.5-8b", 
             "messages": [
                 {"role": "user", "content": prompts.get(prompt_type, prompts["quote"])}
             ],
@@ -49,7 +49,6 @@ def generate_content(prompt_type):
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
         
-        # فحص إذا كانت المنصة أرجعت خطأ
         if 'error' in response_data:
             print(f"⚠️ OpenRouter Error: {response_data['error']['message']}")
             return "حدث خطأ أثناء توليد المحتوى من السيرفر الوسيط."
