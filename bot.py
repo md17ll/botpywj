@@ -33,8 +33,8 @@ def generate_content(prompt_type):
         }
         
         payload = {
-            # استخدام نموذج لاما 3 المجاني المتاح دائما على اوبن راوتر وبدون أي تعقيدات
-            "model": "meta-llama/llama-3-8b-instruct:free", 
+            # المعرّف الرسمي المفتوح والمستقر تماماً في OpenRouter
+            "model": "openrouter/auto", 
             "messages": [
                 {"role": "user", "content": prompts.get(prompt_type, prompts["quote"])}
             ],
@@ -43,7 +43,9 @@ def generate_content(prompt_type):
         
         headers = {
             "Authorization": f"Bearer {GEMINI_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://railway.app", # متطلب لتشغيل بعض نماذج OpenRouter المستقرة
+            "X-Title": "Telegram Auto Bot"
         }
         
         response = requests.post(url, json=payload, headers=headers)
