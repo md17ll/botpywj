@@ -22,7 +22,7 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # تم تصحيح الرابط هنا وحذف التكرار لتفادي خطأ الـ 404 نهائياً
+        # رابط مباشر وصريح ومفحوص لنموذج gemini-1.5-flash بدون أي تكرار
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
@@ -50,10 +50,12 @@ def generate_content(prompt_type):
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
         
-        # كاشف الأخطاء الذكي
+        # طباعة الرد الكامل في الـ Logs للتحقق الصارم من استجابة جوجل
+        print(f"🔍 [DEBUG] Google Raw Response: {response_data}")
+        
         if 'error' in response_data:
             print(f"⚠️ Google API Refused Us: {response_data['error']['message']}")
-            return "حدث خطأ أثناء توليد المحتوى بسبب قيود الـ API."
+            return f"حدث خطأ بسبب قيود الـ API: {response_data['error']['message']}"
             
         generated_text = response_data['candidates'][0]['content']['parts'][0]['text']
         return generated_text.strip()
@@ -105,7 +107,6 @@ def get_auto_post_keyboard():
     btn_24h = types.InlineKeyboardButton("كل 24 ساعة", callback_data="set_auto_86400")
     btn_stop = types.InlineKeyboardButton("🛑 إيقاف النشر التلقائي الدوري", callback_data="stop_auto")
     btn_back = types.InlineKeyboardButton("🔙 عودة للرئيسية", callback_data="back_to_home")
-    markup.add(btn_1h, btn_6h, axes_12h=btn_12h, axes_24h=btn_24h)
     markup.add(btn_1h, btn_6h, btn_12h, btn_24h)
     markup.add(btn_stop)
     markup.add(btn_back)
@@ -153,7 +154,7 @@ def handle_query(call):
             bot.send_message(CHAT_ID, text, parse_mode="Markdown")
             bot.edit_message_text(f"🚀 **تم التوليد والنشر بنجاح وبشكل فوري في القناة!**\n\nالنص المنشور:\n_{text}_", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
         except Exception as e:
-            bot.edit_message_text(f"❌ **فشل النشر الفوري:** تأكد من رتبة الآدمن للبوت.\nالخطأ: {e}", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
+            bot.edit_message_text(f"❌ **فشل النشر الفوري:**\nالخطأ: {text if 'بسبب قيود' in text else e}", call.message.chat.id, call.message.message_id, reply_markup=get_main_keyboard())
 
     elif call.data in ["gen_quote", "regen_quote"]:
         bot.edit_message_text("جاري التفكير وتوليد المقولة... 🌌", call.message.chat.id, call.message.message_id)
