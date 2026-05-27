@@ -2,9 +2,9 @@ import os
 import threading
 import time
 import random
+import requests
 import telebot
 from telebot import types
-import google.generativeai as genai
 
 # Configuration from Environment Variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -12,9 +12,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 CHAT_ID = os.getenv("CHANNEL_OR_CHAT_ID")
 ADMIN_ID = os.getenv("ADMIN_ID")
 
-# Initialize Clients
+# Initialize Telegram Client
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-genai.configure(api_key=GEMINI_API_KEY)
 
 # Global Variables for Control
 pending_posts = {}
@@ -23,14 +22,8 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # إعدادات متطورة لزيادة الإبداع والعشوائية ومنع التكرار
-        generation_config = {
-            "temperature": 0.95,
-            "top_p": 0.95,
-            "top_k": 40,
-        }
-        # تم تعديل السطر أدناه لإضافة المسار الكامل المباشر لحل مشكلة 404 نهائياً
-        model = genai.GenerativeModel('models/gemini-1.5-flash', generation_config=generation_config)
+        # الاتصال المباشر بـ API جوجل عبر الويب لتفادي أخطاء المكتبات القديمة
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
         chosen_theme = random.choice(random_themes)
@@ -40,10 +33,29 @@ def generate_content(prompt_type):
             "article": f"اكتب مقالاً مصغراً وعميقاً (3 فقرات مكثفة) يناقش معضلة وجودية أو فكرة نفسية غامضة حول ({chosen_theme}). الأسلوب شاعري، رصين، وبليغ جداً، مبتكر وغير مكرر، دون مقدمات أو ترحيب."
         }
         
-        response = model.generate_content(prompts.get(prompt_type, prompts["quote"]))
-        return response.text.strip()
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": prompts.get(prompt_type, prompts["quote"])
+                }]
+            }],
+            "generationConfig": {
+                "temperature": 0.95,
+                "topP": 0.95,
+                "topK": 40
+            }
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, json=payload, headers=headers)
+        response_data = response.json()
+        
+        # استخراج النص المولد من استجابة جوجل
+        generated_text = response_data['candidates'][0]['content']['parts'][0]['text']
+        return generated_text.strip()
+        
     except Exception as e:
-        print(f"Generation error: {e}")
+        print(f"Direct API Error: {e}")
         return "حدث خطأ أثناء توليد المحتوى."
 
 def get_main_keyboard():
