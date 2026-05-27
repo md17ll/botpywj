@@ -22,8 +22,8 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # رابط مباشر وصريح ومفحوص لنموذج gemini-1.5-flash بدون أي تكرار
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        # استخدام نموذج gemini-pro المستقر لتفادي أخطاء العناوين نهائياً
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
         chosen_theme = random.choice(random_themes)
@@ -40,7 +40,7 @@ def generate_content(prompt_type):
                 }]
             }],
             "generationConfig": {
-                "temperature": 0.95,
+                "temperature": 0.85,
                 "topP": 0.95,
                 "topK": 40
             }
@@ -49,9 +49,6 @@ def generate_content(prompt_type):
         headers = {"Content-Type": "application/json"}
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
-        
-        # طباعة الرد الكامل في الـ Logs للتحقق الصارم من استجابة جوجل
-        print(f"🔍 [DEBUG] Google Raw Response: {response_data}")
         
         if 'error' in response_data:
             print(f"⚠️ Google API Refused Us: {response_data['error']['message']}")
