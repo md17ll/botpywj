@@ -8,7 +8,7 @@ from telebot import types
 
 # Configuration from Environment Variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # مفتاح OpenRouter الخاص بك
 CHAT_ID = os.getenv("CHANNEL_OR_CHAT_ID")
 ADMIN_ID = os.getenv("ADMIN_ID")
 
@@ -33,8 +33,8 @@ def generate_content(prompt_type):
         }
         
         payload = {
-            # تم تحديث الاسم هنا إلى المعرّف المجاني والمستقر تماماً في OpenRouter لنموذج جيمناي فلاش
-            "model": "google/gemini-flash-1.5-8b", 
+            # استخدام نموذج لاما 3 المجاني المتاح دائما على اوبن راوتر وبدون أي تعقيدات
+            "model": "meta-llama/llama-3-8b-instruct:free", 
             "messages": [
                 {"role": "user", "content": prompts.get(prompt_type, prompts["quote"])}
             ],
