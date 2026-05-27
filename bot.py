@@ -22,7 +22,6 @@ auto_post_thread = None
 
 def generate_content(prompt_type):
     try:
-        # الاتصال المباشر بـ API جوجل عبر الويب لتفادي أخطاء المكتبات القديمة
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         
         random_themes = ["الوجود", "الزمن", "الوعي الذاتي", "العزلة", "الذاكرة", "الحقيقة", "الوهم", "المصير", "الحياة", "الروح"]
@@ -50,12 +49,18 @@ def generate_content(prompt_type):
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
         
-        # استخراج النص المولد من استجابة جوجل
+        # إذا أرجعت جوجل خطأ صريحاً ستطبعه هنا في الـ Logs
+        if 'error' in response_data:
+            print(f"⚠️ Google API Refused Us: {response_data['error']['message']}")
+            return "حدث خطأ أثناء توليد المحتوى بسبب قيود الـ API."
+            
         generated_text = response_data['candidates'][0]['content']['parts'][0]['text']
         return generated_text.strip()
         
     except Exception as e:
-        print(f"Direct API Error: {e}")
+        print(f"❌ Direct API Error: {e}")
+        if 'response_data' in locals():
+            print(f"🔍 Full Google Response was: {response_data}")
         return "حدث خطأ أثناء توليد المحتوى."
 
 def get_main_keyboard():
