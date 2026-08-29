@@ -19,36 +19,33 @@ def gs(k,d=""):
 def ss(k,v):q("INSERT INTO settings VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v",(k,str(v)))
 def clean(t):
  if not t:return ""
- t=t.replace('ـ','').replace('`','').replace('"','').replace("'",""); t=re.sub(r'[*_~#]+','',t); return re.sub(r'\s+',' ',t).strip()
-def normalize(t):
- t=clean(t); t=re.sub(r'[أإآٱ]','ا',t).replace('ؤ','و').replace('ئ','ي'); t=re.sub(r'[\u064B-\u065F\u0670\u06D6-\u06ED]','',t); return t
+ t=re.sub(r'[\u064B-\u065F\u0670\u06D6-\u06ED]','',t); t=re.sub(r'[أإآٱ]','ا',t).replace('ؤ','و').replace('ئ','ي').replace('ء',''); t=t.replace('ـ','').replace('`','').replace('"','').replace("'",""); t=re.sub(r'[*_~#]+','',t); t=re.sub(r'[^\u0600-\u06FF\s،؛؟.!]', '', t); return re.sub(r'\s+',' ',t).strip()
+def normalize(t):return clean(t).replace('،','').replace('؛','').replace('؟','').replace('.','').replace('!','')
 def valid_arabic(t):
  if not t or t.startswith("خطا"):return False
  if re.search(r'[A-Za-z]',t):return False
- if re.search(r'[{}\[\]<>_=\\/|@#$%^&*~`]',t):return False
- words=t.split(); ar=len(re.findall(r'[\u0621-\u064A]',t))
- return 6<=len(words)<=26 and ar>=15
+ words=[w for w in t.split() if re.search(r'[\u0621-\u064A]',w)]; ar=len(re.findall(r'[\u0621-\u064A]',t))
+ return len(words)>=5 and ar>=12 and len(t)<=220
 def too_similar(t):
  nt=normalize(t); rows=q("SELECT text FROM posts WHERE status='published' ORDER BY id DESC LIMIT 100",fetch=True)
- return any(SequenceMatcher(None,nt,normalize(r['text'])).ratio()>=0.80 for r in rows)
-def ai(prompt,temp=.82):
+ return any(SequenceMatcher(None,nt,normalize(r['text'])).ratio()>=0.82 for r in rows)
+def ai(prompt,temp=.78):
  if not AI_KEY:return "خطا: مفتاح OpenRouter غير موجود"
  try:
-  r=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {AI_KEY}","Content-Type":"application/json","HTTP-Referer":"https://railway.app","X-Title":"Telegram Content Manager"},json={"model":MODEL,"messages":[{"role":"system","content":"انت كاتب عربي محترف. اكتب جملة عربية فصحى طبيعية وواضحة فقط. لا تشرح ولا تحلل ولا تعرض خطوات التفكير. لا تستخدم الانجليزية او الرموز الغريبة او القوائم."},{"role":"user","content":prompt}],"temperature":temp,"max_tokens":120},timeout=(5,25))
+  r=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {AI_KEY}","Content-Type":"application/json","HTTP-Referer":"https://railway.app","X-Title":"Telegram Content Manager"},json={"model":MODEL,"messages":[{"role":"system","content":"انت كاتب عربي فصيح. المطلوب جملة عربية واحدة بسيطة ومفهومة من اول قراءة ولها معنى كامل. استخدم كلمات عربية شائعة وتركيبا سليما. لا تستخدم التشكيل او الهمزات او الانجليزية او الزخرفة او الحروف المنفصلة. لا تشرح ولا تكتب عنوانا."},{"role":"user","content":prompt}],"temperature":temp,"max_tokens":100},timeout=(5,25))
   if r.status_code!=200:return f"خطا AI: OpenRouter HTTP {r.status_code}"
-  d=r.json(); choices=d.get("choices") or []; msg=(choices[0].get("message") or {}) if choices else {}; text=clean(msg.get("content") or "")
+  d=r.json(); choices=d.get("choices") or []; msg=(choices[0].get("message") or {}) if choices else {}; raw=msg.get("content") or ""; text=clean(raw)
   if not text:return "خطا AI: OpenRouter رجع محتوى فارغ"
   u=d.get("usage") or {}; q("INSERT INTO usage VALUES(NULL,?,?,?,?,?)",(datetime.now().isoformat(timespec="seconds"),u.get("prompt_tokens",0),u.get("completion_tokens",0),u.get("total_tokens",0),float(u.get("cost") or 0))); return text
  except Exception as e:return "خطا AI: "+str(e)[:120]
 def generate(theme=None,style=None,smart=False):
- chosen=random.sample(THEMES,random.randint(2,3)) if smart or not theme else [theme]+random.sample([x for x in THEMES if x!=theme],1); sty=random.choice(list(STYLES.values())) if smart or not style else STYLES.get(style,style)
- old=q("SELECT text FROM posts WHERE status='published' ORDER BY id DESC LIMIT 12",fetch=True); avoid=" | ".join(clean(x['text'])[:70] for x in old)
- prompt=f"اكتب حكمة او عبارة واحدة جديدة ومفهومة من 8 الى 20 كلمة. الموضوع: {', '.join(chosen)}. النبرة: {sty}. اجعلها طبيعية ولها معنى واضح مثل: الوحدة ليست غياب الناس، بل اللحظة التي تسمع فيها نفسك بوضوح. لا تنسخ المثال. لا تستخدم كلمات اجنبية ولا حروفا منفصلة ولا زخرفة ولا رموزا غريبة. لا تكرر هذه العبارات او تعيد صياغتها: {avoid}. اكتب الجملة فقط."
- last=""
- for attempt in range(2):
-  last=ai(prompt,.78 if attempt==0 else .9)
-  if valid_arabic(last) and not too_similar(last):return last
- return "خطا AI: لم ينتج عبارة عربية واضحة وجديدة"
+ chosen=random.sample(THEMES,2) if smart or not theme else [theme]; sty=random.choice(list(STYLES.values())) if smart or not style else STYLES.get(style,style)
+ old=q("SELECT text FROM posts WHERE status='published' ORDER BY id DESC LIMIT 10",fetch=True); avoid=" | ".join(clean(x['text'])[:65] for x in old)
+ prompt=f"اكتب عبارة عربية قصيرة من 7 الى 18 كلمة عن {', '.join(chosen)} باسلوب {sty}. يجب ان تكون فكرة واحدة واضحة ومترابطة ومفهومة للقارئ العادي، وليست كلمات فلسفية عشوائية. مثال للمستوى فقط: الوحدة ليست غياب الناس، بل اللحظة التي تسمع فيها نفسك بوضوح. لا تنسخ المثال. لا تكرر او تعيد صياغة: {avoid}. اكتب العبارة فقط."
+ for attempt in range(3):
+  text=ai(prompt,.72 if attempt==0 else .82)
+  if valid_arabic(text) and not too_similar(text):return text
+ return "خطا AI: تعذر انتاج عبارة عربية واضحة، حاول مرة اخرى"
 def publish(text,source="manual"):
  t=clean(text)
  if not valid_arabic(t):raise ValueError("تم منع النشر: العبارة غير عربية او غير واضحة")
