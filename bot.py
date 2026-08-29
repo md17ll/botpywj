@@ -37,12 +37,12 @@ def ai(prompt,temp=.82):
   u=d.get("usage") or {}; q("INSERT INTO usage VALUES(NULL,?,?,?,?,?)",(datetime.now().isoformat(timespec="seconds"),u.get("prompt_tokens",0),u.get("completion_tokens",0),u.get("total_tokens",0),float(u.get("cost") or 0))); return text
  except Exception as e:return "خطا AI: "+str(e)[:120]
 def generate(theme=None,style=None,smart=False):
- chosen=random.sample(THEMES,2) if smart or not theme else [theme]; sty=random.choice(list(STYLES.values())) if smart or not style else STYLES.get(style,style)
+ chosen=[random.choice(THEMES)] if smart or not theme else [theme]; sty=random.choice(list(STYLES.values())) if smart or not style else STYLES.get(style,style)
  old=q("SELECT text FROM posts WHERE status='published' ORDER BY id DESC LIMIT 8",fetch=True); avoid=" | ".join(clean(x['text'])[:60] for x in old)
- prompt=f"اكتب عبارة عربية فصحى واحدة قصيرة وواضحة وعميقة عن {', '.join(chosen)} باسلوب {sty}. اجعل معناها مفهوما من اول قراءة، من 7 الى 18 كلمة، بلا شرح ولا عنوان ولا هاشتاغ ولا انجليزية ولا تشكيل. تجنب الهمزات. لا تكرر هذه العبارات: {avoid}. اكتب العبارة فقط."
- text=ai(prompt)
+ prompt=f"اكتب عبارة عربية فصحى واحدة عن {chosen[0]} باسلوب {sty}. المطلوب فكرة حقيقية وواقعية ومرتبة، لها معنى واضح يفهم من اول قراءة. اكتبها كفكرة يمكن ان يلاحظها الانسان في الحياة او النفس او العلاقات، وليس كمجموعة كلمات فلسفية. اجعل الجملة طبيعية وقوية من 8 الى 20 كلمة. تجنب الاستعارات الغريبة والكلام المبهم والمبالغة والعبارات التي تبدو مولدة اليا. حتى لو كان الاسلوب غامضا او شاعريا يجب ان يبقى المعنى واضحا وواقعيا. مستوى الكتابة المطلوب مثل: الخوف من الفشل يضيع فرصا اكثر من الفشل نفسه. ومثل: بعض الناس لا يتغيرون فجاة، هم فقط يتوقفون عن اخفاء حقيقتهم. لا تنسخ الامثلة ولا تعيد صياغتها. بلا شرح ولا عنوان ولا هاشتاغ ولا انجليزية ولا تشكيل. تجنب الهمزات. لا تكرر هذه العبارات السابقة: {avoid}. اكتب العبارة فقط."
+ text=ai(prompt,.72)
  if is_usable(text) and not too_similar(text):return text
- text=ai(prompt,.9)
+ text=ai(prompt,.80)
  if is_usable(text) and not too_similar(text):return text
  return text if text.startswith("خطا") else "خطا AI: لم يتم الحصول على عبارة مناسبة، حاول مرة اخرى"
 def publish(text,source="manual"):
