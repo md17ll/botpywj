@@ -40,14 +40,18 @@ def publish(text,source="manual"):
  if not t or t.startswith("خطا"):raise ValueError(t or "النص فارغ")
  bot.send_message(CHAT_ID,t); now=datetime.now().isoformat(timespec="seconds"); q("INSERT INTO posts VALUES(NULL,?,?,?,?,?,?,?,?,?)",(t,"short","","",source,"published",0,now,now)); return t
 def kb(rows):
- m=types.InlineKeyboardMarkup(row_width=1)
+ m=types.InlineKeyboardMarkup()
  for row in rows:m.row(*[types.InlineKeyboardButton(a,callback_data=b) for a,b in row])
  return m
-def mainkb():return kb([[("🧠 توليد عبارة","content")],[("⚡ جرب وانشر مباشرة","try_publish")],[("🔄 النشر الدوري الذكي","auto")],[("📊 الاحصائيات","stats")],[("🟢 حالة البوت","status")],[("💰 استهلاك AI","usage")]])
-def themekb():return kb([[("🎲 مزيج ذكي","mix")],[("🌌 الوجود","th_0")],[("😨 الخوف","th_12")],[("🌑 الوحدة","th_3")],[("🧠 الوعي","th_2")],[("🏠 الرئيسية","home")]])
-def stylekb():return kb([[("🎲 مزيج اساليب","st_smart")],[("🧠 فلسفي عميق","st_deep")],[("🌑 غامض","st_mystery")],[("🪞 نفسي","st_psych")],[("🖤 سوداوي","st_dark")],[("🌙 شاعري","st_poetic")],[("🏠 الرئيسية","home")]])
+def mainkb():return kb([[("🧠 توليد عبارة","content")],[("⚡ جرب وانشر مباشرة","try_publish")],[("🔄 النشر الدوري الذكي","auto")],[("📊 الاحصائيات","stats"),("🟢 حالة البوت","status")],[("💰 استهلاك AI","usage")]])
+def themekb():return kb([[("🎲 مزيج ذكي","mix")],[("🌌 الوجود","th_0"),("😨 الخوف","th_12")],[("🌑 الوحدة","th_3"),("🧠 الوعي","th_2")],[("🏠 الرئيسية","home")]])
+def stylekb():return kb([[("🎲 مزيج اساليب","st_smart")],[("🧠 فلسفي عميق","st_deep"),("🌑 غامض","st_mystery")],[("🪞 نفسي","st_psych"),("🖤 سوداوي","st_dark")],[("🌙 شاعري","st_poetic")],[("🏠 الرئيسية","home")]])
 def previewkb():return kb([[("📢 نشر الان","pub")],[("🔄 عبارة جديدة","regen")],[("🏠 الرئيسية","home")]])
-def autokb():return kb([[("كل ساعة","int_3600")],[("كل 3 ساعات","int_10800")],[("كل 6 ساعات","int_21600")],[("كل 12 ساعة","int_43200")],[("كل 24 ساعة","int_86400")],[("🛑 ايقاف النشر الدوري","autostop")],[("🏠 الرئيسية","home")]])
+def autokb():return kb([[("⏱ كل ساعة","int_3600")],[("⏱ كل 3 ساعات","int_10800"),("⏱ كل 6 ساعات","int_21600")],[("⏱ كل 12 ساعة","int_43200"),("⏱ كل 24 ساعة","int_86400")],[("🛑 ايقاف النشر الدوري","autostop")],[("🏠 الرئيسية","home")]])
+def interval_name(sec):
+ names={3600:"كل ساعة",10800:"كل 3 ساعات",21600:"كل 6 ساعات",43200:"كل 12 ساعة",86400:"كل 24 ساعة"}; return names.get(int(sec),f"كل {int(sec)/3600:g} ساعة")
+def auto_text():
+ enabled=gs("auto_enabled")=="1"; sec=int(gs("auto_interval","21600")); return "🔄 النشر الدوري دائما مزيج ذكي من كل المواضيع والاساليب\n\nالحالة: "+("🟢 شغال" if enabled else "🔴 مطفي")+"\nالفترة المختارة: ⏱ "+interval_name(sec)
 def edit(c,text,markup):
  try:bot.edit_message_text(text,c.message.chat.id,c.message.message_id,reply_markup=markup)
  except:bot.send_message(c.message.chat.id,text,reply_markup=markup)
@@ -81,10 +85,10 @@ def cb(c):
   edit(c,"⏳ جاري انشاء عبارة ذكية ونشرها...",kb([[("🏠 الرئيسية","home")]])); t=generate(smart=True)
   if t.startswith("خطا"):edit(c,"❌ "+t,mainkb())
   else:publish(t,"instant-smart"); edit(c,"✅ تم التوليد والنشر مباشرة:\n\n"+t,mainkb())
- elif d=="auto":edit(c,"🔄 النشر الدوري دائما مزيج ذكي من كل المواضيع والاساليب",autokb())
+ elif d=="auto":edit(c,auto_text(),autokb())
  elif d.startswith("int_"):
-  sec=int(d[4:]); ss("auto_interval",sec); ss("auto_enabled","1"); ss("next_auto",(datetime.now()+timedelta(seconds=sec)).isoformat(timespec="seconds")); edit(c,"✅ تم تشغيل النشر الدوري بمزيج ذكي",mainkb())
- elif d=="autostop":ss("auto_enabled","0"); ss("next_auto",""); edit(c,"🛑 تم الايقاف",mainkb())
+  sec=int(d[4:]); ss("auto_interval",sec); ss("auto_enabled","1"); ss("next_auto",(datetime.now()+timedelta(seconds=sec)).isoformat(timespec="seconds")); edit(c,auto_text(),autokb())
+ elif d=="autostop":ss("auto_enabled","0"); ss("next_auto",""); edit(c,auto_text(),autokb())
  elif d=="status":edit(c,"🟢 البوت يعمل\nAI: "+("موجود" if AI_KEY else "مفقود")+"\nالموديل: "+MODEL,mainkb())
  elif d=="usage":
   r=q("SELECT COUNT(*) n,COALESCE(SUM(total_tokens),0)t,COALESCE(SUM(cost),0)c FROM usage",fetch=True)[0]; edit(c,f"💰 الطلبات: {r['n']}\nالتوكنات: {r['t']}\nالتكلفة: ${r['c']:.4f}",mainkb())
