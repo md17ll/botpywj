@@ -4,7 +4,7 @@ from difflib import SequenceMatcher
 import requests, telebot
 from telebot import types
 TOKEN=os.getenv("TELEGRAM_TOKEN"); AI_KEY=os.getenv("OPENROUTER_API_KEY") or os.getenv("GEMINI_API_KEY"); CHAT_ID=os.getenv("CHANNEL_OR_CHAT_ID"); ADMIN_ID=str(os.getenv("ADMIN_ID","")); DB=os.getenv("DB_PATH","bot_data.db")
-MODEL=os.getenv("OPENROUTER_MODEL","openrouter/auto")
+MODEL="google/gemini-2.5-flash-lite"
 bot=telebot.TeleBot(TOKEN) if TOKEN else None; lock=threading.Lock(); states={}; stop_event=threading.Event()
 THEMES=["الوجود","الزمن","الوعي","الوحدة","الذاكرة","الحقيقة","الوهم","المصير","الحياة","الروح","النفس","العلاقات","الخوف","النجاح"]
 STYLES={"deep":"فلسفي عميق","mystery":"غامض","psych":"نفسي","dark":"سوداوي","poetic":"شاعري","elegant":"تحفيزي راق","smart":"مزيج ذكي"}
