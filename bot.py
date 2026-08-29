@@ -22,28 +22,32 @@ def clean(t):
 def ai(prompt,temp=.9):
  if not AI_KEY:return "خطا: مفتاح OpenRouter غير موجود"
  try:
-  r=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {AI_KEY}","Content-Type":"application/json","HTTP-Referer":"https://railway.app","X-Title":"Telegram Content Manager"},json={"model":MODEL,"messages":[{"role":"user","content":prompt}],"temperature":temp,"max_tokens":180},timeout=(5,25))
+  r=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {AI_KEY}","Content-Type":"application/json","HTTP-Referer":"https://railway.app","X-Title":"Telegram Content Manager"},json={"model":MODEL,"messages":[{"role":"system","content":"اكتب بالعربية الفصحى. اجب بالعبارة المطلوبة فقط."},{"role":"user","content":prompt}],"temperature":temp,"max_tokens":220},timeout=(5,25))
   if r.status_code!=200:return f"خطا AI: OpenRouter HTTP {r.status_code}"
-  d=r.json(); choices=d.get("choices") or []; text=clean(((choices[0].get("message") or {}).get("content") or "") if choices else "")
+  d=r.json(); choices=d.get("choices") or []; msg=(choices[0].get("message") or {}) if choices else {}; text=clean(msg.get("content") or "")
+  if not text:
+   reasoning=clean(msg.get("reasoning") or "")
+   if reasoning:
+    parts=re.split(r'[.!؟\n]',reasoning); text=next((clean(x) for x in reversed(parts) if 5<=len(clean(x).split())<=30),"")
   if not text:return "خطا AI: OpenRouter رجع محتوى فارغ"
   u=d.get("usage") or {}; q("INSERT INTO usage VALUES(NULL,?,?,?,?,?)",(datetime.now().isoformat(timespec="seconds"),u.get("prompt_tokens",0),u.get("completion_tokens",0),u.get("total_tokens",0),float(u.get("cost") or 0))); return text
  except Exception as e:return "خطا AI: "+str(e)[:120]
 def generate(theme=None,style=None,smart=False):
  chosen=random.sample(THEMES,random.randint(3,5)) if smart or not theme else [theme]+random.sample([x for x in THEMES if x!=theme],2); sty=random.choice(list(STYLES.values())) if smart or not style else STYLES.get(style,style)
- return ai(f"اكتب عبارة عربية فصحى واحدة قصيرة جدا وعميقة. امزج طبيعيا بين: {', '.join(chosen)}. الاسلوب: {sty}. جملة واحدة فقط من 8 الى 22 كلمة. لا شرح ولا مقدمة ولا هاشتاغ. اكتب العبارة فقط.")
+ return ai(f"اكتب عبارة عربية فصحى واحدة قصيرة جدا وعميقة. امزج طبيعيا بين: {', '.join(chosen)}. الاسلوب: {sty}. جملة واحدة فقط من 8 الى 22 كلمة. ممنوع الشرح والمقدمة والعنوان والهاشتاغ. اكتب العبارة النهائية فقط.")
 def publish(text,source="manual"):
  t=clean(text)
  if not t or t.startswith("خطا"):raise ValueError(t or "النص فارغ")
  bot.send_message(CHAT_ID,t); now=datetime.now().isoformat(timespec="seconds"); q("INSERT INTO posts VALUES(NULL,?,?,?,?,?,?,?,?,?)",(t,"short","","",source,"published",0,now,now)); return t
 def kb(rows):
- m=types.InlineKeyboardMarkup()
+ m=types.InlineKeyboardMarkup(row_width=1)
  for row in rows:m.row(*[types.InlineKeyboardButton(a,callback_data=b) for a,b in row])
  return m
-def mainkb():return kb([[("🧠 توليد عبارة","content")],[("⚡ جرب وانشر","try_publish")],[("🔄 النشر الدوري","auto")],[("🗃 الارشيف","archive"),("📊 الاحصائيات","stats")],[("💰 استهلاك AI","usage"),("🟢 حالة البوت","status")]])
-def themekb():return kb([[("🎲 مزيج ذكي","mix")],[("🌌 الوجود","th_0"),("😨 الخوف","th_12")],[("🌑 الوحدة","th_3"),("🧠 الوعي","th_2")],[("🏠 الرئيسية","home")]])
-def stylekb():return kb([[("🎲 مزيج اساليب","st_smart")],[("🧠 فلسفي","st_deep"),("🌑 غامض","st_mystery")],[("🪞 نفسي","st_psych"),("🖤 سوداوي","st_dark"),("🌙 شاعري","st_poetic")],[("🏠 الرئيسية","home")]])
-def previewkb():return kb([[("📢 نشر الان","pub"),("🔄 عبارة جديدة","regen")],[("🏠 الرئيسية","home")]])
-def autokb():return kb([[("كل ساعة","int_3600"),("كل 3 ساعات","int_10800")],[("كل 6 ساعات","int_21600"),("كل 12 ساعة","int_43200")],[("كل 24 ساعة","int_86400"),("🛑 ايقاف","autostop")],[("🏠 الرئيسية","home")]])
+def mainkb():return kb([[("🧠 توليد عبارة","content")],[("⚡ جرب وانشر مباشرة","try_publish")],[("🔄 النشر الدوري الذكي","auto")],[("📊 الاحصائيات","stats")],[("🟢 حالة البوت","status")],[("💰 استهلاك AI","usage")]])
+def themekb():return kb([[("🎲 مزيج ذكي","mix")],[("🌌 الوجود","th_0")],[("😨 الخوف","th_12")],[("🌑 الوحدة","th_3")],[("🧠 الوعي","th_2")],[("🏠 الرئيسية","home")]])
+def stylekb():return kb([[("🎲 مزيج اساليب","st_smart")],[("🧠 فلسفي عميق","st_deep")],[("🌑 غامض","st_mystery")],[("🪞 نفسي","st_psych")],[("🖤 سوداوي","st_dark")],[("🌙 شاعري","st_poetic")],[("🏠 الرئيسية","home")]])
+def previewkb():return kb([[("📢 نشر الان","pub")],[("🔄 عبارة جديدة","regen")],[("🏠 الرئيسية","home")]])
+def autokb():return kb([[("كل ساعة","int_3600")],[("كل 3 ساعات","int_10800")],[("كل 6 ساعات","int_21600")],[("كل 12 ساعة","int_43200")],[("كل 24 ساعة","int_86400")],[("🛑 ايقاف النشر الدوري","autostop")],[("🏠 الرئيسية","home")]])
 def edit(c,text,markup):
  try:bot.edit_message_text(text,c.message.chat.id,c.message.message_id,reply_markup=markup)
  except:bot.send_message(c.message.chat.id,text,reply_markup=markup)
@@ -74,20 +78,18 @@ def cb(c):
  elif d=="regen":st["text"]=generate(st.get("theme"),st.get("style")); edit(c,("❌ " if st["text"].startswith("خطا") else "👁 معاينة:\n\n")+st["text"],previewkb())
  elif d=="pub":edit(c,"✅ تم النشر:\n\n"+publish(st["text"]),mainkb())
  elif d=="try_publish":
-  t=generate(smart=True)
+  edit(c,"⏳ جاري انشاء عبارة ذكية ونشرها...",kb([[("🏠 الرئيسية","home")]])); t=generate(smart=True)
   if t.startswith("خطا"):edit(c,"❌ "+t,mainkb())
-  else:publish(t,"instant-smart"); edit(c,"✅ تم التوليد والنشر:\n\n"+t,mainkb())
- elif d=="auto":edit(c,"🔄 النشر الدوري: مزيج ذكي دائما",autokb())
+  else:publish(t,"instant-smart"); edit(c,"✅ تم التوليد والنشر مباشرة:\n\n"+t,mainkb())
+ elif d=="auto":edit(c,"🔄 النشر الدوري دائما مزيج ذكي من كل المواضيع والاساليب",autokb())
  elif d.startswith("int_"):
   sec=int(d[4:]); ss("auto_interval",sec); ss("auto_enabled","1"); ss("next_auto",(datetime.now()+timedelta(seconds=sec)).isoformat(timespec="seconds")); edit(c,"✅ تم تشغيل النشر الدوري بمزيج ذكي",mainkb())
- elif d=="autostop":ss("auto_enabled","0"); edit(c,"🛑 تم الايقاف",mainkb())
+ elif d=="autostop":ss("auto_enabled","0"); ss("next_auto",""); edit(c,"🛑 تم الايقاف",mainkb())
  elif d=="status":edit(c,"🟢 البوت يعمل\nAI: "+("موجود" if AI_KEY else "مفقود")+"\nالموديل: "+MODEL,mainkb())
  elif d=="usage":
   r=q("SELECT COUNT(*) n,COALESCE(SUM(total_tokens),0)t,COALESCE(SUM(cost),0)c FROM usage",fetch=True)[0]; edit(c,f"💰 الطلبات: {r['n']}\nالتوكنات: {r['t']}\nالتكلفة: ${r['c']:.4f}",mainkb())
  elif d=="stats":
   r=q("SELECT COUNT(*) n FROM posts WHERE status='published'",fetch=True)[0]; edit(c,f"📊 المنشور: {r['n']}",mainkb())
- elif d=="archive":
-  rs=q("SELECT text FROM posts ORDER BY id DESC LIMIT 8",fetch=True); edit(c,"🗃 الارشيف\n\n"+"\n\n".join(x['text'] for x in rs),mainkb())
 def startup_checks():
  if not all([TOKEN,AI_KEY,CHAT_ID,ADMIN_ID]):raise RuntimeError("Missing environment variables")
  print("Telegram OK @"+bot.get_me().username,"Model:",MODEL)
