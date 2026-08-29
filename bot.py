@@ -1,5 +1,6 @@
 import os, re, random, sqlite3, threading
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 import requests, telebot
 from telebot import types
 TOKEN=os.getenv("TELEGRAM_TOKEN"); AI_KEY=os.getenv("OPENROUTER_API_KEY") or os.getenv("GEMINI_API_KEY"); CHAT_ID=os.getenv("CHANNEL_OR_CHAT_ID"); ADMIN_ID=str(os.getenv("ADMIN_ID","")); DB=os.getenv("DB_PATH","bot_data.db")
@@ -19,25 +20,38 @@ def ss(k,v):q("INSERT INTO settings VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=e
 def clean(t):
  if not t:return ""
  t=re.sub(r'[أإآٱ]','ا',t).replace('ؤ','و').replace('ئ','ي').replace('ء',''); t=re.sub(r'[\u064B-\u065F\u0670\u06D6-\u06ED]','',t); t=t.replace('ـ','').replace('`','').replace('"','').replace("'",""); t=re.sub(r'[*_~#]+','',t); return re.sub(r'\s+',' ',t).strip()
+def valid_arabic(t):
+ if not t or t.startswith("خطا"):return False
+ ar=len(re.findall(r'[\u0600-\u06FF]',t)); en=len(re.findall(r'[A-Za-z]',t)); return ar>=12 and en==0
+def too_similar(t):
+ nt=clean(t); rows=q("SELECT text FROM posts WHERE status='published' ORDER BY id DESC LIMIT 100",fetch=True)
+ return any(SequenceMatcher(None,nt,clean(r['text'])).ratio()>=0.78 for r in rows)
 def ai(prompt,temp=.9):
  if not AI_KEY:return "خطا: مفتاح OpenRouter غير موجود"
  try:
-  r=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {AI_KEY}","Content-Type":"application/json","HTTP-Referer":"https://railway.app","X-Title":"Telegram Content Manager"},json={"model":MODEL,"messages":[{"role":"system","content":"اكتب بالعربية الفصحى. اجب بالعبارة المطلوبة فقط."},{"role":"user","content":prompt}],"temperature":temp,"max_tokens":220},timeout=(5,25))
+  r=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {AI_KEY}","Content-Type":"application/json","HTTP-Referer":"https://railway.app","X-Title":"Telegram Content Manager"},json={"model":MODEL,"messages":[{"role":"system","content":"اكتب بالعربية الفصحى فقط. ممنوع استخدام اي كلمة او حرف انجليزي. اجب بالعبارة المطلوبة فقط."},{"role":"user","content":prompt}],"temperature":temp,"max_tokens":220},timeout=(5,25))
   if r.status_code!=200:return f"خطا AI: OpenRouter HTTP {r.status_code}"
   d=r.json(); choices=d.get("choices") or []; msg=(choices[0].get("message") or {}) if choices else {}; text=clean(msg.get("content") or "")
   if not text:
    reasoning=clean(msg.get("reasoning") or "")
    if reasoning:
-    parts=re.split(r'[.!؟\n]',reasoning); text=next((clean(x) for x in reversed(parts) if 5<=len(clean(x).split())<=30),"")
+    parts=re.split(r'[.!؟\n]',reasoning); text=next((clean(x) for x in reversed(parts) if 5<=len(clean(x).split())<=30 and valid_arabic(clean(x))),"")
   if not text:return "خطا AI: OpenRouter رجع محتوى فارغ"
   u=d.get("usage") or {}; q("INSERT INTO usage VALUES(NULL,?,?,?,?,?)",(datetime.now().isoformat(timespec="seconds"),u.get("prompt_tokens",0),u.get("completion_tokens",0),u.get("total_tokens",0),float(u.get("cost") or 0))); return text
  except Exception as e:return "خطا AI: "+str(e)[:120]
 def generate(theme=None,style=None,smart=False):
  chosen=random.sample(THEMES,random.randint(3,5)) if smart or not theme else [theme]+random.sample([x for x in THEMES if x!=theme],2); sty=random.choice(list(STYLES.values())) if smart or not style else STYLES.get(style,style)
- return ai(f"اكتب عبارة عربية فصحى واحدة قصيرة جدا وعميقة. امزج طبيعيا بين: {', '.join(chosen)}. الاسلوب: {sty}. جملة واحدة فقط من 8 الى 22 كلمة. ممنوع الشرح والمقدمة والعنوان والهاشتاغ. اكتب العبارة النهائية فقط.")
+ old=q("SELECT text FROM posts WHERE status='published' ORDER BY id DESC LIMIT 20",fetch=True); avoid=" | ".join(clean(x['text'])[:80] for x in old)
+ prompt=f"اكتب عبارة عربية فصحى واحدة قصيرة جدا وعميقة. امزج طبيعيا بين: {', '.join(chosen)}. الاسلوب: {sty}. جملة واحدة فقط من 8 الى 22 كلمة. ممنوع الانجليزية والشرح والمقدمة والعنوان والهاشتاغ. اكتب العبارة النهائية فقط. لا تكرر هذه العبارات ولا معناها القريب: {avoid}"
+ last=""
+ for _ in range(2):
+  last=ai(prompt,random.uniform(.85,1.05))
+  if valid_arabic(last) and not too_similar(last):return last
+ return "خطا AI: لم ينتج عبارة عربية جديدة غير مكررة"
 def publish(text,source="manual"):
  t=clean(text)
- if not t or t.startswith("خطا"):raise ValueError(t or "النص فارغ")
+ if not valid_arabic(t):raise ValueError("تم منع النشر: العبارة ليست عربية بالكامل")
+ if too_similar(t):raise ValueError("تم منع النشر: العبارة مكررة او شديدة التشابه")
  bot.send_message(CHAT_ID,t); now=datetime.now().isoformat(timespec="seconds"); q("INSERT INTO posts VALUES(NULL,?,?,?,?,?,?,?,?,?)",(t,"short","","",source,"published",0,now,now)); return t
 def kb(rows):
  m=types.InlineKeyboardMarkup()
@@ -52,6 +66,8 @@ def interval_name(sec):
  names={3600:"كل ساعة",10800:"كل 3 ساعات",21600:"كل 6 ساعات",43200:"كل 12 ساعة",86400:"كل 24 ساعة"}; return names.get(int(sec),f"كل {int(sec)/3600:g} ساعة")
 def auto_text():
  enabled=gs("auto_enabled")=="1"; sec=int(gs("auto_interval","21600")); return "🔄 النشر الدوري دائما مزيج ذكي من كل المواضيع والاساليب\n\nالحالة: "+("🟢 شغال" if enabled else "🔴 مطفي")+"\nالفترة المختارة: ⏱ "+interval_name(sec)
+def home_text():
+ enabled=gs("auto_enabled")=="1"; sec=int(gs("auto_interval","21600")); return "🤖 لوحة العبارات الذكية\n\n🔄 النشر التلقائي: "+("🟢 شغال" if enabled else "🔴 مطفي")+"\n⏱ "+("النشر: " if enabled else "الفترة المحفوظة: ")+interval_name(sec)
 def edit(c,text,markup):
  try:bot.edit_message_text(text,c.message.chat.id,c.message.message_id,reply_markup=markup)
  except:bot.send_message(c.message.chat.id,text,reply_markup=markup)
@@ -61,30 +77,36 @@ def scheduler():
    now=datetime.now(); nxt=gs("next_auto"); sec=int(gs("auto_interval","21600"))
    if gs("auto_enabled")=="1" and nxt and now>=datetime.fromisoformat(nxt):
     t=generate(smart=True)
-    if not t.startswith("خطا"):publish(t,"automatic")
+    if not t.startswith("خطا"):
+     try:publish(t,"automatic")
+     except Exception as e:print("auto blocked",e)
     ss("next_auto",(datetime.now()+timedelta(seconds=sec)).isoformat(timespec="seconds"))
   except Exception as e:print("scheduler",e)
 @bot.message_handler(commands=["start"])
 def start(m):
- if str(m.from_user.id)==ADMIN_ID:bot.send_message(m.chat.id,"🤖 لوحة العبارات الذكية",reply_markup=mainkb())
+ if str(m.from_user.id)==ADMIN_ID:bot.send_message(m.chat.id,home_text(),reply_markup=mainkb())
 @bot.callback_query_handler(func=lambda c:True)
 def cb(c):
  if str(c.from_user.id)!=ADMIN_ID:return
  try:bot.answer_callback_query(c.id)
  except:pass
  st=states.setdefault(c.from_user.id,{}); d=c.data
- if d=="home":edit(c,"🤖 لوحة العبارات الذكية",mainkb())
+ if d=="home":edit(c,home_text(),mainkb())
  elif d=="content":edit(c,"🎯 اختر الموضوع",themekb())
  elif d=="mix":st["theme"]=None; edit(c,"🎨 اختر الاسلوب",stylekb())
  elif d.startswith("th_"):st["theme"]=THEMES[int(d[3:])]; edit(c,"🎨 اختر الاسلوب",stylekb())
  elif d.startswith("st_"):
   st["style"]=None if d=="st_smart" else d[3:]; st["text"]=generate(st.get("theme"),st.get("style")); edit(c,("❌ " if st["text"].startswith("خطا") else "👁 معاينة:\n\n")+st["text"],previewkb())
  elif d=="regen":st["text"]=generate(st.get("theme"),st.get("style")); edit(c,("❌ " if st["text"].startswith("خطا") else "👁 معاينة:\n\n")+st["text"],previewkb())
- elif d=="pub":edit(c,"✅ تم النشر:\n\n"+publish(st["text"]),mainkb())
+ elif d=="pub":
+  try:edit(c,"✅ تم النشر:\n\n"+publish(st["text"]),mainkb())
+  except Exception as e:edit(c,"❌ "+str(e),previewkb())
  elif d=="try_publish":
   edit(c,"⏳ جاري انشاء عبارة ذكية ونشرها...",kb([[("🏠 الرئيسية","home")]])); t=generate(smart=True)
   if t.startswith("خطا"):edit(c,"❌ "+t,mainkb())
-  else:publish(t,"instant-smart"); edit(c,"✅ تم التوليد والنشر مباشرة:\n\n"+t,mainkb())
+  else:
+   try:publish(t,"instant-smart"); edit(c,"✅ تم التوليد والنشر مباشرة:\n\n"+t,mainkb())
+   except Exception as e:edit(c,"❌ "+str(e),mainkb())
  elif d=="auto":edit(c,auto_text(),autokb())
  elif d.startswith("int_"):
   sec=int(d[4:]); ss("auto_interval",sec); ss("auto_enabled","1"); ss("next_auto",(datetime.now()+timedelta(seconds=sec)).isoformat(timespec="seconds")); edit(c,auto_text(),autokb())
